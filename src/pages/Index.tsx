@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import Icon from "@/components/ui/icon";
 
-interface Contact {
+interface User {
   id: number;
   name: string;
   phone: string;
   avatar: string;
   color: string;
+}
+
+interface Contact extends User {
   lastMsg?: string;
   time?: string;
-  unread?: number;
 }
 
 interface Message {
@@ -20,38 +22,61 @@ interface Message {
   time: string;
 }
 
-const COLORS = [
-  "from-purple-500 to-violet-500",
-  "from-green-500 to-teal-500",
-  "from-pink-500 to-rose-500",
-  "from-orange-500 to-amber-500",
-  "from-blue-500 to-cyan-500",
-  "from-red-500 to-pink-500",
-];
+const SEARCH_URL = "https://functions.poehali.dev/712d3365-942e-42a0-9008-65097f191cc3";
 
-const Index = () => {
+interface IndexProps {
+  currentUser: User;
+}
+
+const Index = ({ currentUser }: IndexProps) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeChat, setActiveChat] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Record<number, Message[]>>({});
   const [inputText, setInputText] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newPhone, setNewPhone] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(true);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const addContact = () => {
-    if (!newName.trim()) return;
-    const contact: Contact = {
-      id: Date.now(),
-      name: newName.trim(),
-      phone: newPhone.trim() || "",
-      avatar: newName.trim()[0].toUpperCase(),
-      color: COLORS[contacts.length % COLORS.length],
-    };
+  useEffect(() => {
+    if (!showAddModal) {
+      setSearchQuery("");
+      setSearchResults([]);
+    }
+  }, [showAddModal]);
+
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      const res = await fetch(
+        `${SEARCH_URL}/?q=${encodeURIComponent(searchQuery)}&exclude_id=${currentUser.id}`
+      );
+      const data = await res.json();
+      setSearchResults(data);
+      setSearching(false);
+    }, 400);
+  }, [searchQuery, currentUser.id]);
+
+  const addContact = (user: User) => {
+    if (contacts.find((c) => c.id === user.id)) {
+      setShowAddModal(false);
+      setActiveChat(contacts.find((c) => c.id === user.id) || null);
+      setMobileSidebarOpen(false);
+      return;
+    }
+    const contact: Contact = { ...user };
     setContacts((prev) => [...prev, contact]);
-    setNewName("");
-    setNewPhone("");
     setShowAddModal(false);
+    setActiveChat(contact);
+    setMobileSidebarOpen(false);
   };
 
   const sendMessage = () => {
@@ -89,13 +114,18 @@ const Index = () => {
           </div>
           <span className="text-lg font-bold text-white">Vibe</span>
         </div>
-        <Button
-          className="bg-[#2AABEE] hover:bg-[#1a8fd1] text-white rounded-full px-4 py-2 text-sm font-semibold"
-          onClick={() => setShowAddModal(true)}
-        >
-          <Icon name="UserPlus" className="w-4 h-4 mr-2" />
-          Новый контакт
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 bg-gradient-to-br ${currentUser.color} rounded-full flex items-center justify-center`}>
+            <span className="text-white text-xs font-bold">{currentUser.avatar}</span>
+          </div>
+          <Button
+            className="bg-[#2AABEE] hover:bg-[#1a8fd1] text-white rounded-full px-4 py-2 text-sm font-semibold"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Icon name="UserPlus" className="w-4 h-4 mr-2" />
+            Новый чат
+          </Button>
+        </div>
       </nav>
 
       {/* Основной макет */}
@@ -106,7 +136,6 @@ const Index = () => {
             mobileSidebarOpen ? "flex" : "hidden"
           } lg:flex w-full lg:w-72 bg-[#232e3c] flex-col border-r border-[#0d1117] flex-shrink-0`}
         >
-          {/* Шапка */}
           <div className="px-4 py-3 border-b border-[#0d1117] flex items-center justify-between">
             <span className="text-white font-semibold">Чаты</span>
             <button
@@ -117,7 +146,6 @@ const Index = () => {
             </button>
           </div>
 
-          {/* Поиск */}
           <div className="px-3 py-2">
             <div className="bg-[#17212b] rounded-full px-3 py-2 flex items-center gap-2">
               <Icon name="Search" className="w-4 h-4 text-[#8ba4bd]" />
@@ -125,7 +153,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Список контактов */}
           <div className="flex-1 overflow-y-auto">
             {contacts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6 text-center gap-4 pb-16">
@@ -133,15 +160,15 @@ const Index = () => {
                   <Icon name="Users" className="w-8 h-8 text-[#8ba4bd]" />
                 </div>
                 <div>
-                  <p className="text-white font-semibold mb-1">Нет контактов</p>
-                  <p className="text-[#8ba4bd] text-sm">Добавьте первый контакт, чтобы начать общение</p>
+                  <p className="text-white font-semibold mb-1">Нет чатов</p>
+                  <p className="text-[#8ba4bd] text-sm">Найдите пользователя и начните общение</p>
                 </div>
                 <Button
                   className="bg-[#2AABEE] hover:bg-[#1a8fd1] text-white rounded-full px-5 py-2 text-sm font-semibold"
                   onClick={() => setShowAddModal(true)}
                 >
                   <Icon name="UserPlus" className="w-4 h-4 mr-2" />
-                  Добавить контакт
+                  Найти пользователя
                 </Button>
               </div>
             ) : (
@@ -165,11 +192,9 @@ const Index = () => {
                         <span className="text-[#8ba4bd] text-xs ml-2 flex-shrink-0">{contact.time}</span>
                       )}
                     </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-[#8ba4bd] text-xs truncate">
-                        {contact.lastMsg || contact.phone || "Нет сообщений"}
-                      </span>
-                    </div>
+                    <span className="text-[#8ba4bd] text-xs truncate block mt-0.5">
+                      {contact.lastMsg || contact.phone || "Нет сообщений"}
+                    </span>
                   </div>
                 </div>
               ))
@@ -181,7 +206,6 @@ const Index = () => {
         <div className={`${!mobileSidebarOpen ? "flex" : "hidden"} lg:flex flex-1 flex-col`}>
           {activeChat ? (
             <>
-              {/* Заголовок чата */}
               <div className="h-14 bg-[#232e3c] border-b border-[#0d1117] flex items-center px-4 gap-3 flex-shrink-0">
                 <Button
                   variant="ghost"
@@ -197,7 +221,7 @@ const Index = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-white font-semibold text-sm">{activeChat.name}</div>
-                  <div className="text-[#8ba4bd] text-xs">{activeChat.phone || "В сети"}</div>
+                  <div className="text-[#8ba4bd] text-xs">{activeChat.phone}</div>
                 </div>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="sm" className="w-8 h-8 p-0 hover:bg-[#2b3847]">
@@ -209,7 +233,6 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Сообщения */}
               <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#17212b]">
                 {(messages[activeChat.id] || []).length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
@@ -239,7 +262,6 @@ const Index = () => {
                 )}
               </div>
 
-              {/* Поле ввода */}
               <div className="p-3 bg-[#17212b] flex-shrink-0">
                 <div className="bg-[#232e3c] rounded-full px-4 py-2 flex items-center gap-3 border border-[#2b3847]">
                   <Icon name="Paperclip" className="w-4 h-4 text-[#8ba4bd] cursor-pointer hover:text-[#2AABEE] transition-colors flex-shrink-0" />
@@ -268,7 +290,6 @@ const Index = () => {
               </div>
             </>
           ) : (
-            /* Пустое состояние — чат не выбран */
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8 bg-[#17212b]">
               <div className="w-20 h-20 bg-[#232e3c] rounded-full flex items-center justify-center">
                 <Icon name="MessageCircle" className="w-10 h-10 text-[#2AABEE]" />
@@ -277,7 +298,7 @@ const Index = () => {
                 <p className="text-white text-lg font-semibold mb-1">Выберите чат</p>
                 <p className="text-[#8ba4bd] text-sm">
                   {contacts.length === 0
-                    ? "Добавьте контакт, чтобы начать общение"
+                    ? "Найдите пользователя, чтобы начать общение"
                     : "Выберите контакт слева, чтобы открыть чат"}
                 </p>
               </div>
@@ -287,7 +308,7 @@ const Index = () => {
                   onClick={() => setShowAddModal(true)}
                 >
                   <Icon name="UserPlus" className="w-4 h-4 mr-2" />
-                  Добавить контакт
+                  Найти пользователя
                 </Button>
               )}
             </div>
@@ -295,7 +316,7 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Модалка добавления контакта */}
+      {/* Модалка поиска пользователей */}
       {showAddModal && (
         <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
@@ -303,7 +324,7 @@ const Index = () => {
         >
           <div className="bg-[#232e3c] rounded-2xl p-6 w-full max-w-sm border border-[#2b3847] shadow-2xl">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-bold text-lg">Новый контакт</h2>
+              <h2 className="text-white font-bold text-lg">Новый чат</h2>
               <button
                 onClick={() => setShowAddModal(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#2b3847] transition-colors"
@@ -312,54 +333,69 @@ const Index = () => {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-[#8ba4bd] text-xs font-medium mb-1.5 block">Имя *</label>
-                <div className="relative">
-                  <Icon name="User" className="w-4 h-4 text-[#8ba4bd] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addContact()}
-                    placeholder="Введите имя"
-                    autoFocus
-                    className="w-full bg-[#17212b] border border-[#2b3847] rounded-xl px-4 py-3 pl-10 text-white text-sm placeholder-[#8ba4bd] focus:outline-none focus:border-[#2AABEE] transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[#8ba4bd] text-xs font-medium mb-1.5 block">Номер телефона</label>
-                <div className="relative">
-                  <Icon name="Phone" className="w-4 h-4 text-[#8ba4bd] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="tel"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addContact()}
-                    placeholder="+7 000 000-00-00"
-                    className="w-full bg-[#17212b] border border-[#2b3847] rounded-xl px-4 py-3 pl-10 text-white text-sm placeholder-[#8ba4bd] focus:outline-none focus:border-[#2AABEE] transition-colors"
-                  />
-                </div>
-              </div>
+            <div className="relative mb-4">
+              <Icon name="Search" className="w-4 h-4 text-[#8ba4bd] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Имя или номер телефона..."
+                autoFocus
+                className="w-full bg-[#17212b] border border-[#2b3847] rounded-xl px-4 py-3 pl-10 text-white text-sm placeholder-[#8ba4bd] focus:outline-none focus:border-[#2AABEE] transition-colors"
+              />
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button
-                variant="outline"
-                className="flex-1 border-[#2b3847] text-[#8ba4bd] hover:bg-[#2b3847] hover:text-white rounded-xl bg-transparent"
-                onClick={() => setShowAddModal(false)}
-              >
-                Отмена
-              </Button>
-              <Button
-                className="flex-1 bg-[#2AABEE] hover:bg-[#1a8fd1] text-white rounded-xl font-semibold disabled:opacity-40"
-                onClick={addContact}
-                disabled={!newName.trim()}
-              >
-                Добавить
-              </Button>
+            {/* Результаты */}
+            <div className="min-h-[120px]">
+              {searching && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-[#2AABEE] border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+
+              {!searching && searchQuery.length < 2 && (
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+                  <Icon name="Search" className="w-8 h-8 text-[#2b3847]" />
+                  <p className="text-[#8ba4bd] text-sm">Введите имя или телефон для поиска</p>
+                </div>
+              )}
+
+              {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+                  <Icon name="UserX" className="w-8 h-8 text-[#2b3847]" />
+                  <p className="text-[#8ba4bd] text-sm">Пользователи не найдены</p>
+                </div>
+              )}
+
+              {!searching && searchResults.length > 0 && (
+                <div className="space-y-1">
+                  {searchResults.map((user) => {
+                    const alreadyAdded = contacts.some((c) => c.id === user.id);
+                    return (
+                      <div
+                        key={user.id}
+                        onClick={() => addContact(user)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#2b3847] cursor-pointer transition-colors"
+                      >
+                        <div
+                          className={`w-10 h-10 bg-gradient-to-br ${user.color} rounded-full flex items-center justify-center flex-shrink-0`}
+                        >
+                          <span className="text-white text-sm font-bold">{user.avatar}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{user.name}</p>
+                          <p className="text-[#8ba4bd] text-xs truncate">{user.phone}</p>
+                        </div>
+                        {alreadyAdded ? (
+                          <span className="text-[#8ba4bd] text-xs flex-shrink-0">В чатах</span>
+                        ) : (
+                          <Icon name="MessageCircle" className="w-4 h-4 text-[#2AABEE] flex-shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

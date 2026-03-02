@@ -2,9 +2,19 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Icon from "@/components/ui/icon";
 
-interface AuthProps {
-  onAuth: () => void;
+interface User {
+  id: number;
+  name: string;
+  phone: string;
+  avatar: string;
+  color: string;
 }
+
+interface AuthProps {
+  onAuth: (user: User) => void;
+}
+
+const AUTH_URL = "https://functions.poehali.dev/9accaa92-ec55-41fb-b18a-485d8de1dc44";
 
 const Auth = ({ onAuth }: AuthProps) => {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -12,16 +22,34 @@ const Auth = ({ onAuth }: AuthProps) => {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAuth();
+    setError("");
+    setLoading(true);
+
+    const res = await fetch(AUTH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: mode, name, phone, password }),
+    });
+
+    const data = await res.json();
+    setLoading(false);
+
+    if (!res.ok) {
+      setError(data.error || "Ошибка, попробуйте ещё раз");
+      return;
+    }
+
+    onAuth(data);
   };
 
   return (
     <div className="min-h-screen bg-[#17212b] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Логотип */}
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-gradient-to-br from-[#2AABEE] to-[#1a8fd1] rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl">
             <Icon name="MessageCircle" className="w-10 h-10 text-white" />
@@ -30,27 +58,21 @@ const Auth = ({ onAuth }: AuthProps) => {
           <p className="text-[#8ba4bd] text-sm">Мессенджер нового поколения</p>
         </div>
 
-        {/* Карточка формы */}
         <div className="bg-[#232e3c] rounded-2xl p-6 shadow-xl border border-[#2b3847]">
-          {/* Переключатель */}
           <div className="flex bg-[#17212b] rounded-xl p-1 mb-6">
             <button
               className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                mode === "login"
-                  ? "bg-[#2AABEE] text-white shadow"
-                  : "text-[#8ba4bd] hover:text-white"
+                mode === "login" ? "bg-[#2AABEE] text-white shadow" : "text-[#8ba4bd] hover:text-white"
               }`}
-              onClick={() => setMode("login")}
+              onClick={() => { setMode("login"); setError(""); }}
             >
               Вход
             </button>
             <button
               className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                mode === "register"
-                  ? "bg-[#2AABEE] text-white shadow"
-                  : "text-[#8ba4bd] hover:text-white"
+                mode === "register" ? "bg-[#2AABEE] text-white shadow" : "text-[#8ba4bd] hover:text-white"
               }`}
-              onClick={() => setMode("register")}
+              onClick={() => { setMode("register"); setError(""); }}
             >
               Регистрация
             </button>
@@ -108,6 +130,12 @@ const Auth = ({ onAuth }: AuthProps) => {
               </div>
             </div>
 
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-xs">
+                {error}
+              </div>
+            )}
+
             {mode === "login" && (
               <div className="text-right">
                 <button type="button" className="text-[#2AABEE] text-xs hover:underline">
@@ -118,20 +146,19 @@ const Auth = ({ onAuth }: AuthProps) => {
 
             <Button
               type="submit"
-              className="w-full bg-[#2AABEE] hover:bg-[#1a8fd1] text-white py-3 rounded-xl text-sm font-semibold shadow-lg mt-2"
+              disabled={loading}
+              className="w-full bg-[#2AABEE] hover:bg-[#1a8fd1] text-white py-3 rounded-xl text-sm font-semibold shadow-lg mt-2 disabled:opacity-60"
             >
-              {mode === "login" ? "Войти в Vibe" : "Создать аккаунт"}
+              {loading ? "Загрузка..." : mode === "login" ? "Войти в Vibe" : "Создать аккаунт"}
             </Button>
           </form>
 
-          {/* Разделитель */}
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-[#2b3847]"></div>
             <span className="text-[#8ba4bd] text-xs">или</span>
             <div className="flex-1 h-px bg-[#2b3847]"></div>
           </div>
 
-          {/* Вход через телефон (QR) */}
           <Button
             variant="outline"
             className="w-full border-[#2b3847] text-[#8ba4bd] hover:bg-[#2b3847] hover:text-white rounded-xl py-3 text-sm bg-transparent"
@@ -141,7 +168,6 @@ const Auth = ({ onAuth }: AuthProps) => {
           </Button>
         </div>
 
-        {/* Футер */}
         <p className="text-center text-[#8ba4bd] text-xs mt-6 leading-relaxed">
           Регистрируясь, вы соглашаетесь с{" "}
           <button className="text-[#2AABEE] hover:underline">Условиями использования</button>

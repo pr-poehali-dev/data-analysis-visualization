@@ -10,8 +10,16 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+interface User {
+  id: number;
+  name: string;
+  phone: string;
+  avatar: string;
+  color: string;
+}
+
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -23,16 +31,16 @@ const App = () => {
             <Route
               path="/auth"
               element={
-                isAuthenticated
+                currentUser
                   ? <Navigate to="/" replace />
-                  : <Auth onAuth={() => setIsAuthenticated(true)} />
+                  : <Auth onAuth={(user) => setCurrentUser(user)} />
               }
             />
             <Route
               path="/"
               element={
-                isAuthenticated
-                  ? <Index />
+                currentUser
+                  ? <Index currentUser={currentUser} />
                   : <Navigate to="/auth" replace />
               }
             />
